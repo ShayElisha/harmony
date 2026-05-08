@@ -8,6 +8,10 @@
     "backend": {
       "entrypoint": "backend",
       "routePrefix": "/api"
+    },
+    "ai-service": {
+      "entrypoint": "ai-service",
+      "routePrefix": "/_ai"
     }
   }
 }

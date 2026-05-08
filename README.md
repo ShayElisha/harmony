@@ -81,3 +81,12 @@ Full-stack MVP scaffold for the **Relationship Intelligence System**.
   - `DEEPSEEK_API_KEY`
   - `DEEPSEEK_BASE_URL`
   - `DEEPSEEK_MODEL`
+
+## Vercel Single Deployment (frontend + backend + ai-service)
+- Root `vercel.json` is configured with three services:
+  - `frontend` -> `/`
+  - `backend` -> `/api`
+  - `ai-service` -> `/_ai`
+- In Vercel, deploy from repository root.
+- Backend automatically calls `https://$VERCEL_URL/_ai` when `AI_SERVICE_URL` is not set.
+- For local development keep `AI_SERVICE_URL=http://localhost:8001`.

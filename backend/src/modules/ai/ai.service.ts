@@ -14,8 +14,20 @@ export class AiService {
     @InjectModel(AiLog.name) private readonly aiLogModel: Model<AiLogDocument>,
   ) {}
 
+  private getAiBaseUrl(): string {
+    const explicit = this.config.get<string>('AI_SERVICE_URL');
+    if (explicit) return explicit;
+
+    const vercelUrl = this.config.get<string>('VERCEL_URL');
+    if (vercelUrl) {
+      return `https://${vercelUrl}/_ai`;
+    }
+
+    return 'http://localhost:8001';
+  }
+
   async translate(userId: string, input: string) {
-    const baseUrl = this.config.get<string>('AI_SERVICE_URL') ?? 'http://localhost:8001';
+    const baseUrl = this.getAiBaseUrl();
     const { data } = await firstValueFrom(
       this.http.post(`${baseUrl}/translate`, { input }),
     );
@@ -29,7 +41,7 @@ export class AiService {
   }
 
   async emergency(userId: string, input: string) {
-    const baseUrl = this.config.get<string>('AI_SERVICE_URL') ?? 'http://localhost:8001';
+    const baseUrl = this.getAiBaseUrl();
     const { data } = await firstValueFrom(
       this.http.post(`${baseUrl}/emergency`, { input }),
     );
