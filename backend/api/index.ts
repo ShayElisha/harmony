@@ -13,11 +13,13 @@ async function getAppModule(): Promise<unknown> {
   if (cachedAppModule) return cachedAppModule;
 
   try {
-    const built = await import('../dist/app.module.js');
+    const builtModulePath = '../dist/app.module.js';
+    const built = await import(builtModulePath);
     cachedAppModule = built.AppModule;
     return cachedAppModule;
   } catch {
-    const source = await import('../src/app.module');
+    const sourceModulePath = '../src/app.module';
+    const source = await import(sourceModulePath);
     cachedAppModule = source.AppModule;
     return cachedAppModule;
   }
