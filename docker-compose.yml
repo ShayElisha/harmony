@@ -1,0 +1,64 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: harmony-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: harmony-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  ai-service:
+    build:
+      context: ./ai-service
+    container_name: harmony-ai-service
+    restart: unless-stopped
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: deepseek-r1:8b
+    depends_on:
+      - ollama
+    ports:
+      - "8001:8001"
+
+  backend:
+    build:
+      context: ./backend
+    container_name: harmony-backend
+    restart: unless-stopped
+    environment:
+      MONGO_URI: mongodb://mongodb:27017/harmonyai
+      JWT_SECRET: replace-me
+      REFRESH_SECRET: replace-me-too
+      JWT_EXPIRES_IN: 15m
+      AI_SERVICE_URL: http://ai-service:8001
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: deepseek-r1:8b
+    depends_on:
+      - mongodb
+      - ai-service
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: harmony-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+
+volumes:
+  mongo_data:
+  ollama_data:
