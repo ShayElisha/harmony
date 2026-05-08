@@ -3,7 +3,7 @@ import './styles.css';
 const app = document.getElementById('app');
 if (!app) throw new Error('App root missing');
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '')
-  || 'http://localhost:3000';
+  || '/api';
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
 let accessToken = localStorage.getItem('harmony_access_token') ?? '';
