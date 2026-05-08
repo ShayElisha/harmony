@@ -2,6 +2,8 @@ import './styles.css';
 
 const app = document.getElementById('app');
 if (!app) throw new Error('App root missing');
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '')
+  || 'http://localhost:3000';
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
 let accessToken = localStorage.getItem('harmony_access_token') ?? '';
@@ -27,7 +29,7 @@ const clearSession = () => {
 };
 
 const api = async <T>(path: string, body?: unknown): Promise<T> => {
-  const res = await fetch(`http://localhost:3000${path}`, {
+  const res = await fetch(`${apiBaseUrl}${path}`, {
     method: body ? 'POST' : 'GET',
     headers: {
       'Content-Type': 'application/json',

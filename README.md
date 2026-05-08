@@ -52,3 +52,32 @@ Full-stack MVP scaffold for the **Relationship Intelligence System**.
 - AI module calls FastAPI service, which calls Ollama and falls back safely if model is unavailable.
 - The frontend stores the access token in memory for demo flow testing.
 - If Docker CLI is not installed locally, run services manually from each folder.
+
+## Deploy (Vercel + Backend host)
+### 1) Frontend on Vercel
+- Import this repository to Vercel and set **Root Directory** to `frontend`.
+- Build command: `npm run build`
+- Output directory: `dist`
+- Set environment variable in Vercel:
+  - `VITE_API_BASE_URL=https://<your-backend-domain>`
+
+`frontend/vercel.json` already includes SPA rewrite support.
+
+### 2) Backend on Render/Railway/Fly
+- Deploy `backend` as a Node service.
+- Set environment variables:
+  - `PORT` (platform usually injects this)
+  - `FRONTEND_ORIGIN=https://<your-vercel-domain>`
+  - `MONGO_URI`
+  - `JWT_SECRET`
+  - `JWT_EXPIRES_IN`
+  - `REFRESH_SECRET`
+  - `AI_SERVICE_URL`
+
+### 3) AI service on Render/Railway/Fly
+- Deploy `ai-service` as a Python service.
+- Set:
+  - `OLLAMA_URL` / local model settings (if using Ollama)
+  - `DEEPSEEK_API_KEY`
+  - `DEEPSEEK_BASE_URL`
+  - `DEEPSEEK_MODEL`
