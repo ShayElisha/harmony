@@ -24,6 +24,11 @@ async function getHandler(): Promise<Handler> {
 
 export default async function handler(req: Request, res: Response): Promise<void> {
   try {
+    if (req.url.startsWith('/api/')) {
+      req.url = req.url.replace('/api', '');
+    } else if (req.url === '/api') {
+      req.url = '/';
+    }
     const appHandler = await getHandler();
     await appHandler(req, res);
   } catch (error) {
