@@ -13,7 +13,7 @@
       "use": "@vercel/node"
     },
     {
-      "src": "ai-service/main.py",
+      "src": "ai-service/app/main.py",
       "use": "@vercel/python"
     }
   ],
@@ -24,15 +24,10 @@
     },
     {
       "src": "/_ai/(.*)",
-      "dest": "ai-service/main.py"
+      "dest": "ai-service/app/main.py"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1"
-    },
-    {
-      "src": "/favicon.svg",
-      "dest": "/favicon.svg"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
