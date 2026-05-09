@@ -80,12 +80,10 @@ Full-stack MVP scaffold for the **Relationship Intelligence System**.
   - `DEEPSEEK_BASE_URL`
   - `DEEPSEEK_MODEL`
 
-## Recommended Production Topology
-- Frontend: Vercel
-- Backend API: Render
-- AI service: Render
-
-Use `render.yaml` in this repository to bootstrap both Render services.
-
-After the AI service is live, set backend `AI_SERVICE_URL` to:
-- `https://<your-ai-service>.onrender.com`
+## One Vercel Project (Frontend + Backend + AI)
+- Root `vercel.json` builds:
+  - Frontend static output from `frontend/`
+  - Backend Node function from `backend/api/index.ts` on `/api/*`
+  - AI Python function from `ai-service/app/main.py` on `/_ai/*`
+- Frontend defaults to calling `/api` in production.
+- Backend defaults to calling `https://$VERCEL_URL/_ai` when `AI_SERVICE_URL` is not set.
