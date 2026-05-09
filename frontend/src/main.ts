@@ -93,6 +93,93 @@ const escapeHtml = (value: string): string =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
 
+const LS_ONBOARDING_DONE = 'harmony_onboarding_done';
+const LS_PARTNER_DISPLAY_NAME = 'harmony_partner_display_name';
+const LS_WEEKLY_FOCUS = 'harmony_weekly_focus';
+
+const WEEKLY_RITUAL_SUGGESTIONS = [
+  'הערב: עשר דקות בלי טלפון — רק שיחה קצרה או שקט משותף.',
+  'לבחור משהו קטן ביחד: טיילו רבע שעת או ארוחת ערב בלי מסך.',
+  'לבקש בעדינות עזרה אחת להיום, בלי רשימת תלונות.',
+  'לפני שינה — נושא רגוע וקצר, במקום "לסגור את כל הפרקים".',
+  'לכתוב הודעה של הערכה (משפט אחד) ולשלוח בצהריים.',
+];
+
+const ROUTES_WITH_STAGGER = new Set([
+  '#/dashboard',
+  '#/platform',
+  '#/connect',
+  '#/cycle',
+  '#/preferences',
+  '#/ai',
+  '#/assistant',
+  '#/emergency',
+  '#/mood',
+  '#/timeline',
+  '#/insights',
+  '#/notifications',
+  '#/goals',
+]);
+
+const isoWeekKey = (d = new Date()): string => {
+  const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dow = x.getUTCDay() || 7;
+  x.setUTCDate(x.getUTCDate() + 4 - dow);
+  const yStart = new Date(Date.UTC(x.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((x.getTime() - yStart.getTime()) / 86400000 + 1) / 7);
+  return `${x.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+};
+
+const ritualWeekStorageKey = (weekKey: string) => `harmony_ritual_done_${weekKey}`;
+
+const pickWeeklyRitualText = (): string => {
+  const key = isoWeekKey();
+  let h = 0;
+  for (let i = 0; i < key.length; i++) {
+    h = (Math.imul(31, h) + key.charCodeAt(i)) >>> 0;
+  }
+  return WEEKLY_RITUAL_SUGGESTIONS[h % WEEKLY_RITUAL_SUGGESTIONS.length];
+};
+
+const tsFromMaybeDate = (v?: string): number => {
+  if (!v) return 0;
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+
+const formatHebrewTimelineDate = (ms: number): string => {
+  if (!ms) return 'תאריך לא זמין';
+  try {
+    return new Date(ms).toLocaleString('he-IL', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return 'תאריך לא זמין';
+  }
+};
+
+type TimelineMergedItem = {
+  at: number;
+  kind: 'mood' | 'ai_translate' | 'ai_emergency' | 'cycle' | 'goal' | 'ritual';
+  title: string;
+  body: string;
+};
+
+const scheduleShellStagger = () => {
+  queueMicrotask(() => {
+    requestAnimationFrame(() => {
+      document.querySelector('main.layout')?.classList.add('page-enter-ready');
+    });
+  });
+};
+
+const partnerNicknameForAdvice = (): string =>
+  localStorage.getItem(LS_PARTNER_DISPLAY_NAME)?.trim() || '';
+
 /** מנתח יום בודד — עוזר לחישובי מחזור בדאשבורד הגבר */
 const stripTime = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
@@ -254,7 +341,7 @@ const buildMalePartnerAdvice = (
 const renderMaleDashboardCards = (partnerFullName: string, advice: MaleAdvice): string => {
   const tipsList = advice.tips.map((t) => `<li>${escapeHtml(t)}</li>`).join('');
   return `
-    <article class="platform-card dashboard-male-card">
+    <article class="platform-card dashboard-male-card page-card-stagger">
       <h3>${escapeHtml(advice.phaseLabel)}</h3>
       <p class="dashboard-male-headline">${escapeHtml(advice.headline)}</p>
       <p class="helper-text">${escapeHtml(advice.body)}</p>
@@ -262,7 +349,7 @@ const renderMaleDashboardCards = (partnerFullName: string, advice: MaleAdvice): 
       <ul class="dashboard-tips">${tipsList}</ul>
       <p class="helper-text subtle">הנתונים מבוססים על מה ש${escapeHtml(partnerFullName)} מזינה במעקב המחזור. לא רפואי — רק כיוון זוגי.</p>
     </article>
-    <article class="platform-card dashboard-male-card">
+    <article class="platform-card dashboard-male-card page-card-stagger">
       <h3>קישור מהיר</h3>
       <p class="helper-text">מעקב מלא אחר הנתונים בדף "מעקב מחזור". חיבור זוגי מתעדכן בדף "חיבור זוגי".</p>
       <div class="actions">
@@ -301,8 +388,9 @@ const loadMaleDashboardInsights = async () => {
     }
 
     const cycleData = await api<{ entries: MaleCycleEntry[] }>('/tracking/cycle/view');
-    const advice = buildMalePartnerAdvice(partnerData.partner.name, cycleData.entries);
-    mount.innerHTML = renderMaleDashboardCards(partnerData.partner.name, advice);
+    const partnerLabel = partnerNicknameForAdvice() || partnerData.partner.name;
+    const advice = buildMalePartnerAdvice(partnerLabel, cycleData.entries);
+    mount.innerHTML = renderMaleDashboardCards(partnerLabel, advice);
   } catch {
     mount.innerHTML = `<article class="platform-card dashboard-male-card"><p class="helper-text">לא הצלחנו לטעון את העצות. נסו לרענן או בדקו שהתחברתם מחדש.</p></article>`;
   }
@@ -348,19 +436,34 @@ const shellTemplate = (
         <button id="menuToggle" class="menu-toggle" type="button" aria-label="תפריט">☰</button>
       </div>
       <div id="navLinks" class="nav-links">
-        <a href="#/dashboard">דאשבורד</a>
-        <a href="#/platform">הפלטפורמה שלי</a>
-        <a href="#/connect">חיבור זוגי</a>
-        <a href="#/cycle">מעקב מחזור</a>
-        <a href="#/preferences">העדפות ופרטיות</a>
-        <a href="#/ai">תרגום רגשי</a>
-        <a href="#/assistant">עוזר יומי</a>
-        <a href="#/emergency">מצב חירום</a>
-        <a href="#/mood">מעקב מצב רוח</a>
-        <a href="#/timeline">טיימליין זוגי</a>
-        <a href="#/insights">אינסייטים</a>
-        <a href="#/notifications">התראות</a>
-        <a href="#/goals">יעדים משותפים</a>
+        <div class="nav-group">
+          <span class="nav-group-label">מרכז</span>
+          <div class="nav-group-links">
+            <a href="#/dashboard">דאשבורד</a>
+            <a href="#/platform">הפלטפורמה שלי</a>
+            <a href="#/connect">חיבור זוגי</a>
+            <a href="#/cycle">מעקב מחזור</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label">כלים</span>
+          <div class="nav-group-links">
+            <a href="#/ai">תרגום רגשי</a>
+            <a href="#/assistant">עוזר יומי</a>
+            <a href="#/emergency">מצב חירום</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label">מעקב והגדרות</span>
+          <div class="nav-group-links">
+            <a href="#/mood">מצב רוח</a>
+            <a href="#/timeline">טיימליין זוגי</a>
+            <a href="#/insights">אינסייטים</a>
+            <a href="#/goals">יעדים</a>
+            <a href="#/notifications">התראות</a>
+            <a href="#/preferences">העדפות ופרטיות</a>
+          </div>
+        </div>
       </div>
       <button id="logoutBtn" class="btn ghost nav-logout">התנתקות</button>
     </nav>
@@ -409,27 +512,38 @@ const renderLanding = () => {
         </div>
 
         <div class="home-copy">
-          <p class="home-kicker">ברוכים הבאים לעידן חדש בזוגיות</p>
-          <p class="helper-text">
-            עוזר זוגי חכם שמנתח רגשות, מפחית מתחים ומציע תגובות טובות יותר בזמן אמת.
-            זהו דף הכניסה הראשי שלך - מכאן מתחילים.
+          <p class="home-kicker">HarmonyAI — פחות ניחושים, יותר קרבה</p>
+          <h2 class="home-headline">כשהרגש עולה, קל לפספס מה האחר אומר באמת</h2>
+          <div class="home-visual-accent" aria-hidden="true">
+            <span class="home-visual-dot"></span>
+            <span class="home-visual-line"></span>
+            <span class="home-visual-heart">✦</span>
+            <span class="home-visual-line"></span>
+            <span class="home-visual-dot"></span>
+          </div>
+          <p class="helper-text home-lead">
+            כאן תמצאו כלים לשיחה רגועה יותר: להבין טקסטים, לעצור ריב לפני שהוא מתפוצץ, ולעקוב אחרי מחזור
+            ומצב רוח — ביחד, בלי בושה ובלי אבחון רפואי.
           </p>
           <ul class="home-points">
-            <li>תרגום רגשי חכם לשיחות מורכבות</li>
-            <li>מצב חירום בזמן ריב עם תגובה מיידית</li>
-            <li>מעקב מצב רוח ותובנות מותאמות אישית</li>
+            <li><strong>מעקב מחזור ומצב רוח</strong> — תמונה אמיתית לזמנים רגישים</li>
+            <li><strong>חיבור זוגי</strong> — שיתוף נתונים רק מה שמתאים לכם</li>
+            <li><strong>תרגום רגשי ומצב חירום</strong> — עזר מיידי כשנדחפתם לפינה מילולית</li>
           </ul>
         </div>
       </div>
 
       <div class="actions home-cta">
-        <a class="btn primary link-btn" href="#/register">להרשמה מהירה</a>
-        <a class="btn link-btn" href="#/login">להתחברות לחשבון קיים</a>
+        <a class="btn primary link-btn home-cta-primary" href="#/register">התחלה — יצירת חשבון</a>
+        <a class="btn ghost link-btn" href="#/login">כבר משתמשים? התחברות</a>
       </div>
 
       <div class="entry-note">
-        <strong>איך ממשיכים?</strong>
-        <span>הרשמה/התחברות -> מעבר לדאשבורד -> בחירת פונקציה לפי הצורך.</span>
+        <strong>למה השקעה של דקה?</strong>
+        <span
+          >אחרי הרשמה קצרה תעברו הגדרות זוגיות (כינוי, מיקוד שבועי) ותגיעו לדאשבורד עם טיימליין שמושך נתונים
+          מהאפליקציה — לא טקסט דמה.</span
+        >
       </div>
     </section>`,
     false,
@@ -441,8 +555,8 @@ const renderLanding = () => {
 const renderRegister = () => {
   app.innerHTML = shellTemplate(
     `<section class="panel glass page auth-page">
-      <h2>הרשמה</h2>
-      <p class="helper-text">ממלאים פרטים בסיסיים, לוחצים יצירת חשבון, וממשיכים אוטומטית לדאשבורד.</p>
+      <h2 class="page-title">הרשמה</h2>
+      <p class="helper-text page-lead">פרטים בסיסיים, ואז שלושה שלבים קצרים (כינוי ומיקוד שבועי) לפני הדאשבורד.</p>
       <div class="form-grid">
         <input id="name" placeholder="שם מלא" />
         <input id="email" placeholder="אימייל" />
@@ -481,7 +595,7 @@ const renderRegister = () => {
       });
       setSession(result.accessToken, result.user.email, result.user.role);
       toast('נרשמת בהצלחה', 'success');
-      location.hash = '#/dashboard';
+      location.hash = '#/onboarding';
     } catch (error) {
       output.textContent = `הרשמה נכשלה: ${String(error)}`;
       toast('הרשמה נכשלה', 'error');
@@ -492,8 +606,8 @@ const renderRegister = () => {
 const renderLogin = () => {
   app.innerHTML = shellTemplate(
     `<section class="panel glass page">
-      <h2>התחברות</h2>
-      <p class="helper-text">הקלידו אימייל וסיסמה. בהצלחה תעברו אוטומטית לדאשבורד.</p>
+      <h2 class="page-title">התחברות</h2>
+      <p class="helper-text page-lead">אימייל וסיסמה. אם עוד לא הגדרתם את השלושה שלבים — תופנו אליהם לפני הדאשבורד.</p>
       <div class="form-grid">
         <input id="email" placeholder="אימייל" />
         <input id="password" placeholder="סיסמה" type="password" />
@@ -522,11 +636,74 @@ const renderLogin = () => {
       });
       setSession(result.accessToken, result.user.email, result.user.role);
       toast('התחברת בהצלחה', 'success');
-      location.hash = '#/dashboard';
+      location.hash = localStorage.getItem(LS_ONBOARDING_DONE) ? '#/dashboard' : '#/onboarding';
     } catch (error) {
       output.textContent = `התחברות נכשלה: ${String(error)}`;
       toast('התחברות נכשלה', 'error');
     }
+  });
+};
+
+const renderOnboarding = () => {
+  const roleLabels: Record<string, string> = {
+    male: 'גבר במערכת',
+    female: 'אישה במערכת',
+    other: 'תפקיד כללי',
+  };
+  const roleLine = roleLabels[userRole] ?? 'משתמש';
+  app.innerHTML = shellTemplate(
+    `<section class="panel glass page auth-page onboarding-page">
+      <h2>ברוכים הבאים — שלוש הצעדים</h2>
+      <p class="helper-text">
+        עוזר להתאים את הטקסטים בשבילכם (במיוחד בעמוד העצות לבן זוג ובדאשבורד). אפשר לעדכן בכל רגע אחרי ההגדרות.
+      </p>
+      <div class="onboarding-steps">
+        <article class="platform-card page-card-stagger">
+          <h3>שלב 1 · מי בתמונה אצלך</h3>
+          <p class="helper-text subtle">כרגע נרשמת כ־<strong>${escapeHtml(roleLine)}</strong>.</p>
+        </article>
+        <article class="platform-card page-card-stagger">
+          <h3>שלב 2 · איך לכתוב לבת או לבן הזוג בהמלצות?</h3>
+          <label class="sr-only" for="onboardPartnerName">כינוי או שם של בן או בת הזוג לטקסטים מותאמים</label>
+          <input id="onboardPartnerName" placeholder="לדוגמה: מיכל או כינוי חם (יופיע בהמלצות)" />
+        </article>
+        <article class="platform-card page-card-stagger">
+          <h3>שלב 3 · מה חשוב לך השבוע?</h3>
+          <textarea id="onboardWeeklyFocus" rows="2" placeholder="משפט אחד, למשל: פחות ריב בארוחות"></textarea>
+        </article>
+      </div>
+      <div class="actions">
+        <button id="finishOnboardingBtn" class="btn primary">סיום והמשך לדאשבורד</button>
+      </div>
+      <p class="helper-text subtle">
+        <a href="#/dashboard" id="skipToDashboardBtn" class="onboarding-skip-link">דלגו לדאשבורד (מדלגים על ההמלצה לשלבים)</a>
+      </p>
+    </section>`,
+    false,
+    true,
+    false,
+  );
+
+  const nameInput = byId<HTMLInputElement>('onboardPartnerName');
+  const focusTa = byId<HTMLTextAreaElement>('onboardWeeklyFocus');
+  if (nameInput && localStorage.getItem(LS_PARTNER_DISPLAY_NAME))
+    nameInput.value = localStorage.getItem(LS_PARTNER_DISPLAY_NAME) ?? '';
+  if (focusTa && localStorage.getItem(LS_WEEKLY_FOCUS)) focusTa.value = localStorage.getItem(LS_WEEKLY_FOCUS) ?? '';
+
+  byId<HTMLAnchorElement>('skipToDashboardBtn')?.addEventListener('click', () => {
+    localStorage.setItem(LS_ONBOARDING_DONE, '1');
+  });
+
+  byId<HTMLButtonElement>('finishOnboardingBtn')?.addEventListener('click', () => {
+    const n = nameInput?.value.trim() ?? '';
+    const focus = focusTa?.value.trim() ?? '';
+    if (n) localStorage.setItem(LS_PARTNER_DISPLAY_NAME, n);
+    else localStorage.removeItem(LS_PARTNER_DISPLAY_NAME);
+    if (focus) localStorage.setItem(LS_WEEKLY_FOCUS, focus);
+    else localStorage.removeItem(LS_WEEKLY_FOCUS);
+    localStorage.setItem(LS_ONBOARDING_DONE, '1');
+    toast('ההגדרות נשמרו', 'success');
+    location.hash = '#/dashboard';
   });
 };
 
@@ -537,6 +714,10 @@ const renderDashboard = () => {
       : userRole === 'female'
         ? 'פלטפורמת אישה'
         : 'פלטפורמה כללית';
+  const weeklyFocusNote = localStorage.getItem(LS_WEEKLY_FOCUS)?.trim();
+  const focusStrip = weeklyFocusNote
+    ? `<div class="entry-note onboarding-focus-reminder"><strong>המיקוד שהגדרתם השבוע</strong><span>${escapeHtml(weeklyFocusNote)}</span></div>`
+    : '';
   const maleBlock =
     userRole === 'male'
       ? `<div class="entry-note">
@@ -549,7 +730,10 @@ const renderDashboard = () => {
     `<section class="panel glass page">
       <h2>דאשבורד</h2>
       <p>זהו דף הניהול הראשי שלך.</p>
-      <p class="helper-text">בחרו מהתפריט העליון: תרגום רגשי, מצב חירום או מעקב מצב רוח. כל פונקציה מופיעה בדף נפרד כדי שיהיה ברור מה עושים בכל שלב.</p>
+      <p class="helper-text">
+        מתחילים מהתפריט: כלים לשיחה (תרגום רגשי, חירום), מצב רוח ומחזור, ובסוף — טיימליין עם כל מה שקרה לאחרונה באמת.
+      </p>
+      ${focusStrip}
       <div class="entry-note">
         <strong>${platformLabel}</strong>
         <span>${
@@ -1024,7 +1208,9 @@ const renderAiPage = () => {
   app.innerHTML = shellTemplate(
     `<section class="panel glass page">
       <h2>תרגום רגשי</h2>
-      <p class="helper-text">מה עושים כאן? מדביקים הודעה/משפט שקיבלתם והמערכת מסבירה את המשמעות הרגשית ומה כדאי לעשות עכשיו.</p>
+      <p class="helper-text">
+        הדביקו משפט או קטע מתוך שיחת צ'ט — וננסה להסביר בחום ובבהירות מה כנראה מרגיש הצד השני, ובאיזה כיוון תגובה נכון להתחיל בה.
+      </p>
       <textarea id="textInput" rows="4" placeholder="לדוגמה: היא כתבה לי 'סבבה' אחרי ויכוח"></textarea>
       <div class="actions">
         <button id="translateBtn" class="btn primary">נתח הודעה</button>
@@ -1072,7 +1258,9 @@ const renderEmergencyPage = () => {
   app.innerHTML = shellTemplate(
     `<section class="panel glass page">
       <h2>מצב חירום</h2>
-      <p class="helper-text">מה עושים כאן? בזמן ריב כותבים משפט קצר על הסיטואציה ומקבלים תגובה מומלצת להרגעה מיידית.</p>
+      <p class="helper-text">
+        כשנשאבתם לריב: כמה מילים על מה שנאמר כרגע — וקבלו ניסוח רגוע וקצר שיעזור לכבות את השריפה במקום להגדיל אותה.
+      </p>
       <textarea id="textInput" rows="4" placeholder="תיאור קצר של הוויכוח הנוכחי"></textarea>
       <div class="actions">
         <button id="emergencyBtn" class="btn warning">קבל הנחיית חירום</button>
@@ -1120,7 +1308,7 @@ const renderAssistantPage = () => {
   app.innerHTML = shellTemplate(
     `<section class="panel glass page">
       <h2>עוזר יומי</h2>
-      <p class="helper-text">המלצות יומיות מותאמות למצב רגשי ולרמת הסיכון לזוגיות.</p>
+      <p class="helper-text">ארבע שניות לקרוא לפני שמגיבים — כל מה שמתחת נכתב בטון תומך ומציאותי, בלי הפחדה ובלי מהומה.</p>
       <div class="platform-grid">
         <article class="platform-card"><h3>מה כן לעשות היום</h3><p>להתחיל באמפתיה, לשאול איך לעזור, ולהגיב בקצרה וברוגע.</p></article>
         <article class="platform-card"><h3>מה לא לומר היום</h3><p>"את מגזימה", "זה רק הורמונים", "לא עשיתי כלום".</p></article>
@@ -1136,7 +1324,9 @@ const renderMoodPage = () => {
   app.innerHTML = shellTemplate(
     `<section class="panel glass page">
       <h2>מעקב מצב רוח</h2>
-      <p class="helper-text">מה עושים כאן? מדרגים עצבנות ועייפות בין 1 ל-10, שולחים, ואז בודקים היסטוריה כדי לזהות דפוסים.</p>
+      <p class="helper-text">
+        דירוג מהיר כשאתם מרגישים שהאוויר מתחמם — מאפשר לכם אחר כך לראות אם יש ימים חוזרים שכדאי לדבר עליהם בזוג לאט.
+      </p>
       <div class="form-grid">
         <input id="irritabilityInput" type="number" min="1" max="10" value="6" placeholder="רמת עצבנות (1-10)" />
         <input id="fatigueInput" type="number" min="1" max="10" value="5" placeholder="רמת עייפות (1-10)" />
@@ -1206,20 +1396,218 @@ const renderMoodPage = () => {
   });
 };
 
+const mergeTimelineItems = async (): Promise<TimelineMergedItem[]> => {
+  const cyclePath = userRole === 'female' ? '/tracking/cycle/me' : '/tracking/cycle/view';
+  const [moodRes, aiRes, cycleRes, goalsRes] = await Promise.all([
+    api<{
+      entries: Array<{ irritability: number; fatigue: number; note?: string; createdAt?: string }>;
+    }>('/tracking/mood/me').catch(() => ({ entries: [] })),
+    api<{
+      logs: Array<{ mode: string; prompt: string; response: string; createdAt?: string }>;
+    }>('/ai/logs/me').catch(() => ({ logs: [] })),
+    api<{
+      entries: Array<{
+        startDate: string;
+        endDate?: string;
+        symptoms?: string[];
+        energyLevel?: number;
+        createdAt?: string;
+      }>;
+    }>(cyclePath).catch(() => ({ entries: [] })),
+    api<{ goals: Array<{ title: string; status: string; createdAt?: string }> }>('/tracking/goals/me').catch(
+      () => ({ goals: [] }),
+    ),
+  ]);
+
+  const rows: TimelineMergedItem[] = [];
+
+  for (const m of moodRes.entries) {
+    const at = tsFromMaybeDate(m.createdAt);
+    rows.push({
+      at: at || Date.now(),
+      kind: 'mood',
+      title: 'מדד מצב רוח',
+      body: `עצבנות ${m.irritability}/10 · עייפות ${m.fatigue}/10${m.note ? ` · ${m.note}` : ''}`,
+    });
+  }
+
+  for (const log of aiRes.logs) {
+    const at = tsFromMaybeDate(log.createdAt);
+    const isEmerg = log.mode === 'emergency';
+    rows.push({
+      at: at || Date.now(),
+      kind: isEmerg ? 'ai_emergency' : 'ai_translate',
+      title: isEmerg ? 'מצב חירום — AI' : 'תרגום רגשי — AI',
+      body: `"${log.prompt.slice(0, 140)}${log.prompt.length > 140 ? '…' : ''}" → ${log.response.slice(0, 160)}${log.response.length > 160 ? '…' : ''}`,
+    });
+  }
+
+  for (const c of cycleRes.entries) {
+    const at =
+      tsFromMaybeDate(c.createdAt) ||
+      tsFromMaybeDate(`${c.startDate}T12:00:00`) ||
+      Date.now();
+    const sym = (c.symptoms || []).join(', ') || 'לא צוינו';
+    rows.push({
+      at,
+      kind: 'cycle',
+      title: 'מעקב מחזור',
+      body: `התחלה ${c.startDate}${c.endDate ? ` · סיום ${c.endDate}` : ''} · אנרגיה ${c.energyLevel ?? '—'} · ${sym}`,
+    });
+  }
+
+  for (const g of goalsRes.goals) {
+    const at = tsFromMaybeDate(g.createdAt);
+    rows.push({
+      at: at || Date.now(),
+      kind: 'goal',
+      title: g.status === 'completed' ? `יעד הושלם · ${g.title}` : `יעד זוגי · ${g.title}`,
+      body: `סטטוס במערכת: ${g.status}`,
+    });
+  }
+
+  const wk = isoWeekKey();
+  const ritualKey = ritualWeekStorageKey(wk);
+  const ritualDoneRaw = localStorage.getItem(ritualKey);
+  if (ritualDoneRaw) {
+    const at = Number(ritualDoneRaw) || 0;
+    rows.push({
+      at,
+      kind: 'ritual',
+      title: 'משימת זוגיות שבועית',
+      body: `${pickWeeklyRitualText()} (סומן כבוצע)`,
+    });
+  }
+
+  rows.sort((a, b) => b.at - a.at);
+  return rows;
+};
+
+const kindIcon = (k: TimelineMergedItem['kind']) => {
+  switch (k) {
+    case 'mood':
+      return 'מצב רוח';
+    case 'ai_translate':
+      return 'תרגום';
+    case 'ai_emergency':
+      return 'חירום';
+    case 'cycle':
+      return 'מחזור';
+    case 'goal':
+      return 'יעד';
+    case 'ritual':
+      return 'ריטואל';
+    default:
+      return 'אירוע';
+  }
+};
+
+const renderTimelineRows = (items: TimelineMergedItem[]) => {
+  if (!items.length) {
+    return '<p class="helper-text timeline-empty">אין עדיין אירועים שמופיעים כאן. נסו למדוד מצב רוח, להריץ תרגום רגשי, או להזין מחזור — והכול יתאסף אוטומטית.</p>';
+  }
+  return `<ol class="timeline-list" role="list">
+    ${items
+      .map(
+        (it) => `
+      <li class="timeline-item page-card-stagger" data-kind="${escapeHtml(it.kind)}">
+        <div class="timeline-dot" aria-hidden="true"></div>
+        <div class="timeline-body">
+          <div class="timeline-meta">
+            <span class="timeline-badge">${escapeHtml(kindIcon(it.kind))}</span>
+            <time datetime="${Number.isFinite(it.at) ? new Date(it.at).toISOString() : ''}">${escapeHtml(formatHebrewTimelineDate(it.at))}</time>
+          </div>
+          <h3 class="timeline-title">${escapeHtml(it.title)}</h3>
+          <p class="timeline-text">${escapeHtml(it.body)}</p>
+        </div>
+      </li>`,
+      )
+      .join('')}
+  </ol>`;
+};
+
+const wireWeeklyRitualControls = () => {
+  const txt = byId<HTMLParagraphElement>('ritualSuggestionText');
+  const status = byId<HTMLParagraphElement>('ritualStatusLine');
+  const btn = byId<HTMLButtonElement>('ritualDoneBtn');
+  const update = () => {
+    const wk = isoWeekKey();
+    const suggestion = pickWeeklyRitualText();
+    if (txt) txt.textContent = suggestion;
+    const key = ritualWeekStorageKey(wk);
+    const done = localStorage.getItem(key);
+    if (done && status) {
+      status.textContent = `סומן השבוע (${formatHebrewTimelineDate(Number(done) || Date.now())}).`;
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'כבר סומן · תודה!';
+      }
+    } else {
+      if (status) status.textContent = 'עוד לא סומן — אם ביצעתם, לחצו כדי לראות את זה בטיימליין.';
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'סימון: עשינו את זה השבוע';
+      }
+    }
+  };
+  update();
+  btn?.addEventListener('click', () => {
+    const wk = isoWeekKey();
+    const key = ritualWeekStorageKey(wk);
+    localStorage.setItem(key, String(Date.now()));
+    toast('הריטואל נרשם בטיימליין', 'success');
+    update();
+    void (async () => {
+      const mount = byId<HTMLDivElement>('timelineMount');
+      if (!mount) return;
+      mount.innerHTML = '<p class="helper-text">מרענן…</p>';
+      try {
+        const items = await mergeTimelineItems();
+        mount.innerHTML = renderTimelineRows(items);
+        scheduleShellStagger();
+      } catch {
+        mount.innerHTML = '<p class="helper-text">טעינת טיימליין נכשלה</p>';
+      }
+    })();
+  });
+};
+
 const renderTimelinePage = () => {
   app.innerHTML = shellTemplate(
-    `<section class="panel glass page">
+    `<section class="panel glass page timeline-page">
       <h2>טיימליין זוגי</h2>
-      <p class="helper-text">תצוגת אירועים אחרונים: מצבי רוח, שיחות AI ורגעים רגישים.</p>
-      <div class="platform-grid">
-        <article class="platform-card"><h3>היום</h3><p>זוהתה רגישות בינונית. הומלץ על תקשורת רכה.</p></article>
-        <article class="platform-card"><h3>אתמול</h3><p>הופעלה המלצת חירום והקונפליקט נפתר.</p></article>
-        <article class="platform-card"><h3>השבוע</h3><p>Peace score במגמת עלייה.</p></article>
+      <p class="helper-text">
+        כל מה שמתרחש אצלכם באפליקציה — מצב רוח, ריצות של AI, יעדים, מחזור והריטואל השבועי — באותו מקום ובסדר כרונולוגי.
+      </p>
+      <article class="platform-card ritual-card page-card-stagger">
+        <h3>משימת זוגיות השבוע</h3>
+        <p id="ritualSuggestionText" class="ritual-suggestion"></p>
+        <p id="ritualStatusLine" class="helper-text subtle"></p>
+        <div class="actions">
+          <button id="ritualDoneBtn" type="button" class="btn primary">סימון: עשינו את זה השבוע</button>
+        </div>
+      </article>
+      <div id="timelineMount" class="timeline-mount">
+        <p class="helper-text">טוען אירועים…</p>
       </div>
     </section>`,
     true,
   );
   bindLogout();
+  wireWeeklyRitualControls();
+  void (async () => {
+    const mount = byId<HTMLDivElement>('timelineMount');
+    if (!mount) return;
+    try {
+      const items = await mergeTimelineItems();
+      mount.innerHTML = renderTimelineRows(items);
+      scheduleShellStagger();
+    } catch {
+      mount.innerHTML =
+        '<p class="helper-text">לא הצלחנו למשוך נתונים. בדקו חיבור והתחברות.</p>';
+      toast('טעינת טיימליין נכשלה', 'error');
+    }
+  })();
 };
 
 const renderInsightsPage = () => {
@@ -1431,6 +1819,7 @@ const bindLogout = () => {
 };
 
 const protectedRoutes = new Set([
+  '#/onboarding',
   '#/dashboard',
   '#/platform',
   '#/connect',
@@ -1451,22 +1840,91 @@ const router = () => {
     location.hash = '#/login';
     return;
   }
-  if (route === '#/' || route === '') return renderLanding();
-  if (route === '#/register') return renderRegister();
-  if (route === '#/login') return renderLogin();
-  if (route === '#/dashboard') return renderDashboard();
-  if (route === '#/platform') return renderPlatformPage();
-  if (route === '#/connect') return renderConnectPage();
-  if (route === '#/cycle') return renderCyclePage();
-  if (route === '#/preferences') return renderPreferencesPage();
-  if (route === '#/ai') return renderAiPage();
-  if (route === '#/assistant') return renderAssistantPage();
-  if (route === '#/emergency') return renderEmergencyPage();
-  if (route === '#/mood') return renderMoodPage();
-  if (route === '#/timeline') return renderTimelinePage();
-  if (route === '#/insights') return renderInsightsPage();
-  if (route === '#/notifications') return renderNotificationsPage();
-  if (route === '#/goals') return renderGoalsPage();
+  const maybeStaggerNav = (): void => {
+    if (ROUTES_WITH_STAGGER.has(route)) scheduleShellStagger();
+  };
+
+  if (route === '#/' || route === '') {
+    renderLanding();
+    return;
+  }
+  if (route === '#/register') {
+    renderRegister();
+    return;
+  }
+  if (route === '#/login') {
+    renderLogin();
+    return;
+  }
+  if (route === '#/onboarding') {
+    renderOnboarding();
+    return;
+  }
+  if (route === '#/dashboard') {
+    renderDashboard();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/platform') {
+    renderPlatformPage();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/connect') {
+    renderConnectPage();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/cycle') {
+    renderCyclePage();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/preferences') {
+    renderPreferencesPage();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/ai') {
+    renderAiPage();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/assistant') {
+    renderAssistantPage();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/emergency') {
+    renderEmergencyPage();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/mood') {
+    renderMoodPage();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/timeline') {
+    renderTimelinePage();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/insights') {
+    renderInsightsPage();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/notifications') {
+    renderNotificationsPage();
+    maybeStaggerNav();
+    return;
+  }
+  if (route === '#/goals') {
+    renderGoalsPage();
+    maybeStaggerNav();
+    return;
+  }
   app.innerHTML = shellTemplate(`<section class="panel glass page"><h2>העמוד לא נמצא</h2></section>`);
 };
 
