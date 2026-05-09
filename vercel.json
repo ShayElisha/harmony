@@ -8,8 +8,8 @@
     "backend": {
       "entrypoint": "backend",
       "routePrefix": "/api",
-      "installCommand": "npm install --include=dev",
-      "buildCommand": "npm run build"
+      "installCommand": "npm install --include=dev --no-audit --no-fund",
+      "buildCommand": "npm run build && npm ls @nestjs/mongoose mongoose @nestjs/core"
     },
     "ai-service": {
       "entrypoint": "ai-service",
