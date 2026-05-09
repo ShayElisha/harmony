@@ -4,6 +4,10 @@ import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
+  if (!process.env.MONGO_URI) {
+    throw new Error('Missing required environment variable: MONGO_URI');
+  }
+
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
   const frontendOriginRaw = config.get<string>('FRONTEND_ORIGIN') ?? '*';
@@ -20,5 +24,13 @@ async function bootstrap(): Promise<void> {
   const port = Number(config.get<string>('PORT') ?? 3000);
   await app.listen(port);
 }
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception', error);
+});
 
 void bootstrap();
