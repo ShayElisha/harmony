@@ -8,8 +8,8 @@
     "backend": {
       "entrypoint": "backend",
       "routePrefix": "/api",
-      "installCommand": "npm --prefix backend install --include=dev",
-      "buildCommand": "npm --prefix backend run build"
+      "installCommand": "npm install --include=dev",
+      "buildCommand": "npm run build"
     },
     "ai-service": {
       "entrypoint": "ai-service",
