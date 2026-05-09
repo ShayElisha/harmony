@@ -1,19 +1,38 @@
 {
-  "experimentalServices": {
-    "frontend": {
-      "entrypoint": "frontend",
-      "routePrefix": "/",
-      "framework": "vite"
+  "version": 2,
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
     },
-    "backend": {
-      "entrypoint": "backend",
-      "routePrefix": "/api",
-      "installCommand": "npm install --include=dev --no-audit --no-fund",
-      "buildCommand": "npm run build && npm ls @nestjs/mongoose mongoose @nestjs/core"
+    {
+      "src": "backend/api/index.ts",
+      "use": "@vercel/node"
     },
-    "ai-service": {
-      "entrypoint": "ai-service",
-      "routePrefix": "/_ai"
+    {
+      "src": "ai-service/main.py",
+      "use": "@vercel/python"
     }
-  }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "backend/api/index.ts"
+    },
+    {
+      "src": "/_ai/(.*)",
+      "dest": "ai-service/main.py"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/frontend/dist/assets/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/dist/index.html"
+    }
+  ]
 }
