@@ -18,11 +18,6 @@ export class AiService {
     const explicit = this.config.get<string>('AI_SERVICE_URL');
     if (explicit) return explicit;
 
-    const vercelUrl = this.config.get<string>('VERCEL_URL');
-    if (vercelUrl) {
-      return `https://${vercelUrl}/_ai`;
-    }
-
     return 'http://localhost:8001';
   }
 

@@ -55,13 +55,11 @@ Full-stack MVP scaffold for the **Relationship Intelligence System**.
 
 ## Deploy (Vercel + Backend host)
 ### 1) Frontend on Vercel
-- Import this repository to Vercel and set **Root Directory** to `frontend`.
-- Build command: `npm run build`
-- Output directory: `dist`
+- Import this repository to Vercel.
+- If deploying from repo root, `vercel.json` already builds `frontend` and routes SPA paths.
+- Recommended: set **Root Directory** to `frontend` for the simplest setup.
 - Set environment variable in Vercel:
   - `VITE_API_BASE_URL=https://<your-backend-domain>`
-
-`frontend/vercel.json` already includes SPA rewrite support.
 
 ### 2) Backend on Render/Railway/Fly
 - Deploy `backend` as a Node service.
@@ -82,11 +80,12 @@ Full-stack MVP scaffold for the **Relationship Intelligence System**.
   - `DEEPSEEK_BASE_URL`
   - `DEEPSEEK_MODEL`
 
-## Vercel Single Deployment (frontend + backend + ai-service)
-- Root `vercel.json` is configured with three services:
-  - `frontend` -> `/`
-  - `backend` -> `/api`
-  - `ai-service` -> `/_ai`
-- In Vercel, deploy from repository root.
-- Backend automatically calls `https://$VERCEL_URL/_ai` when `AI_SERVICE_URL` is not set.
-- For local development keep `AI_SERVICE_URL=http://localhost:8001`.
+## Recommended Production Topology
+- Frontend: Vercel
+- Backend API: Render
+- AI service: Render
+
+Use `render.yaml` in this repository to bootstrap both Render services.
+
+After the AI service is live, set backend `AI_SERVICE_URL` to:
+- `https://<your-ai-service>.onrender.com`

@@ -1,19 +1,18 @@
 {
-  "experimentalServices": {
-    "frontend": {
-      "entrypoint": "frontend",
-      "routePrefix": "/",
-      "framework": "vite"
-    },
-    "backend": {
-      "entrypoint": "backend",
-      "routePrefix": "/api",
-      "installCommand": "npm install",
-      "buildCommand": "npm run build"
-    },
-    "ai-service": {
-      "entrypoint": "ai-service",
-      "routePrefix": "/_ai"
+  "version": 2,
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist",
+        "installCommand": "npm install",
+        "buildCommand": "npm run build"
+      }
     }
-  }
+  ],
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }
