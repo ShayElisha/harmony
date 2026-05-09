@@ -93,6 +93,221 @@ const escapeHtml = (value: string): string =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
 
+/** מנתח יום בודד — עוזר לחישובי מחזור בדאשבורד הגבר */
+const stripTime = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+const parseYmd = (value: string): Date => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!m) return stripTime(new Date(value));
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const day = Number(m[3]);
+  return new Date(y, mo, day);
+};
+
+const addDays = (d: Date, days: number): Date => {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
+};
+
+const diffDays = (a: Date, b: Date): number =>
+  Math.round((stripTime(a).getTime() - stripTime(b).getTime()) / 86400000);
+
+type MaleCycleEntry = {
+  startDate: string;
+  endDate?: string;
+  energyLevel?: number;
+  symptoms?: string[];
+};
+
+type MaleAdvice = {
+  phase: 'during' | 'between' | 'unknown' | 'no_data';
+  phaseLabel: string;
+  headline: string;
+  body: string;
+  tips: string[];
+  snapshot: string;
+};
+
+const buildMalePartnerAdvice = (
+  partnerName: string,
+  entries: MaleCycleEntry[],
+): MaleAdvice => {
+  const firstName = partnerName.trim().split(/\s+/)[0] || 'בת הזוג';
+  if (!entries.length) {
+    return {
+      phase: 'no_data',
+      phaseLabel: 'אין נתוני מחזור',
+      headline: `${firstName} עדיין לא עדכנה מחזור`,
+      body: 'ברגע שתעדכן תאריכי התחלה/סיום, אנרגיה או תסמינים — כאן יופיעו עצות ממוקדות. בינתיים: שמרו על שפה רגועה ותשאלו מה עוזר.',
+      tips: [
+        'שאלה פשוטה: "מה היית רוצה שאעשה בשבילך השבוע?"',
+        'אל תנחשו — בקשו רשות לפני "פתרונות מהירים".',
+        'אם לוחצים לכם לדחוף עניין — קחו הפסקה של 10 דקות לפני שאתם ממשיכים.',
+      ],
+      snapshot: 'לא הוזנו תאריכים או תסמינים עדיין.',
+    };
+  }
+
+  const sorted = [...entries].sort((a, b) => String(b.startDate).localeCompare(String(a.startDate)));
+  const latest = sorted[0];
+  const start = parseYmd(latest.startDate);
+  const end = latest.endDate ? parseYmd(latest.endDate) : null;
+  const today = stripTime(new Date());
+  const periodFallbackEnd = addDays(start, 7);
+
+  let phase: MaleAdvice['phase'] = 'unknown';
+  if (end) {
+    if (today >= start && today <= end) phase = 'during';
+    else if (today > end) phase = 'between';
+    else if (today < start) phase = 'unknown';
+  } else {
+    if (today >= start && today <= periodFallbackEnd) phase = 'during';
+    else if (today > periodFallbackEnd) phase = 'between';
+    else if (today < start) phase = 'unknown';
+  }
+
+  const symptoms = (latest.symptoms || []).map((s) => s.toLowerCase());
+  const symptomsText = (latest.symptoms || []).join(' ').toLowerCase();
+  const energy = latest.energyLevel;
+  const hasPain =
+    symptomsText.includes('כאב') ||
+    symptomsText.includes('כאבים') ||
+    symptoms.some((s) => s.includes('כאב'));
+  const hasFatigue =
+    symptomsText.includes('עייפ') ||
+    symptomsText.includes('שחיק') ||
+    symptomsText.includes('חולש');
+  const lowEnergy = energy !== undefined && energy <= 4;
+
+  const snapshotParts: string[] = [];
+  snapshotParts.push(`מחזור אחרון מתחיל ב־${latest.startDate}`);
+  if (latest.endDate) snapshotParts.push(`סיום מדווח: ${latest.endDate}`);
+  if (energy !== undefined) snapshotParts.push(`אנרגיה (1–10): ${energy}`);
+  if ((latest.symptoms || []).length) snapshotParts.push(`תסמינים: ${(latest.symptoms || []).join(', ')}`);
+  const snapshot = snapshotParts.join(' · ');
+
+  const symptomTips: string[] = [];
+  if (hasPain) {
+    symptomTips.push('אם מדובר בכאבים — תנו מרחב פיזי, חום/מים חמים אם מתאים, ובלי בדיחות על "הורמונים".');
+  }
+  if (hasFatigue || lowEnergy) {
+    symptomTips.push('אנרגיה נמוכה = פחות משימות, יותר גיבוי מעשי (אוכל, סידורים, שקט).');
+  }
+  if (!symptomTips.length && (latest.symptoms || []).length) {
+    symptomTips.push('יש תסמינים שמוזנים — קראו אותם בקול רגוע ואל תמזגו "אבל זה לא כזה נורא".');
+  }
+
+  if (phase === 'during') {
+    return {
+      phase: 'during',
+      phaseLabel: 'בזמן המחזור (לפי הנתונים שהוזנו)',
+      headline: `עכשיו זה זמן רגיש יותר עבור ${firstName}`,
+      body: 'בשלב הזה כדאי פחות לחץ, פחות ביקורת, ויותר עקביות קטנה: מים, מנוחה, ושפה רכה. אם אתם חייבים לדבר על משהו כבד — קבעו זמן קצר ומודע, לא "על הדרך".',
+      tips: [
+        'תבנית מומלצת: "אני פה. מה עוזר לך היום — שקט, עזרה בבית, או משהו אחר?"',
+        'אם מתחיל ויכוח — עצרו, חזרו אחרי 20 דקות. זה לא חולשה, זה שיקול דעת.',
+        'אם היא מתעייפת מהיר — אל תגלגלו משימות "בונוס"; קחו דברים מהשולחן.',
+        ...symptomTips.slice(0, 2),
+      ],
+      snapshot,
+    };
+  }
+
+  if (phase === 'between') {
+    const daysSinceEnd = end ? diffDays(today, end) : diffDays(today, periodFallbackEnd);
+      const timingNote =
+      end && daysSinceEnd >= 0
+        ? `${daysSinceEnd} ימים אחרי סיום תיאור המחזור האחרון.`
+        : 'המצב מוגדר כבין-מחזורי לפי התאריכים שהוזנו.';
+
+    return {
+      phase: 'between',
+      phaseLabel: 'לפני המחזור הבא / בין מחזורים',
+      headline: `${firstName} כרגע לא בזמן מחזור מדווח — זמן טוב לבנות רזרבה זוגית`,
+      body: `שלב זה מתאים לשגרה יותר יציבה, אבל עדיין כדאי לזכור מה עשה בה אתכם קשה בשבוע שעבר. ${timingNote} זה הרגע למנוע "הפתעות" ולתאם ציפיות כשכולם רגועים.`,
+      tips: [
+        'תזמנו משהו קטן ובדוק (ארוחה, טיול קצר) בלי הפקה של טלנובלה.',
+        'אם בא לכם לפתור מתח מתמשך — עשו את זה כשיש מרווח, לא לפני שינה.',
+        'בקשו עדכון קצר: "איך את מרגישה השבוע?" — בלי לחץ לפרטים.',
+        ...symptomTips.slice(0, 1),
+      ],
+      snapshot,
+    };
+  }
+
+  return {
+    phase: 'unknown',
+    phaseLabel: 'נתונים חלקיים',
+    headline: `קשה לסווג את השלב בדיוק — אבל אפשר עדיין לעזור ל־${firstName}`,
+    body: 'נראה שחסרים תאריכים מספיקים או שיש רישום שעדיין לא מסתנכרן ליום היום. אם משהו לא סגור — עדיף לשאול ישירות מאשר להניח.',
+    tips: [
+      '"אני רוצה להבין איפה את נמצאת עכשיו — מה מרגיש לך נכון לשתף?"',
+      'אל תהפכו ניחושים לעובדות. אם אין דאטה — יש שיחה.',
+      ...symptomTips.slice(0, 2),
+    ],
+    snapshot,
+  };
+};
+
+const renderMaleDashboardCards = (partnerFullName: string, advice: MaleAdvice): string => {
+  const tipsList = advice.tips.map((t) => `<li>${escapeHtml(t)}</li>`).join('');
+  return `
+    <article class="platform-card dashboard-male-card">
+      <h3>${escapeHtml(advice.phaseLabel)}</h3>
+      <p class="dashboard-male-headline">${escapeHtml(advice.headline)}</p>
+      <p class="helper-text">${escapeHtml(advice.body)}</p>
+      <p class="dashboard-snapshot"><strong>מבט על הנתונים:</strong> ${escapeHtml(advice.snapshot)}</p>
+      <ul class="dashboard-tips">${tipsList}</ul>
+      <p class="helper-text subtle">הנתונים מבוססים על מה ש${escapeHtml(partnerFullName)} מזינה במעקב המחזור. לא רפואי — רק כיוון זוגי.</p>
+    </article>
+    <article class="platform-card dashboard-male-card">
+      <h3>קישור מהיר</h3>
+      <p class="helper-text">מעקב מלא אחר הנתונים בדף "מעקב מחזור". חיבור זוגי מתעדכן בדף "חיבור זוגי".</p>
+      <div class="actions">
+        <a class="btn ghost link-btn" href="#/cycle">למעקב מחזור</a>
+        <a class="btn ghost link-btn" href="#/connect">חיבור זוגי</a>
+      </div>
+    </article>`;
+};
+
+const loadMaleDashboardInsights = async () => {
+  const mount = byId<HTMLDivElement>('maleDashboardMount');
+  if (!mount) return;
+  mount.innerHTML =
+    '<article class="platform-card"><p>טוען עצות לפי נתוני בת הזוג…</p></article>';
+  try {
+    const partnerData = await api<{
+      connected: boolean;
+      partner: null | { name: string; email: string; role: string };
+    }>('/couples/partner/me');
+
+    if (!partnerData.connected || !partnerData.partner) {
+      mount.innerHTML = `<article class="platform-card dashboard-male-card">
+          <h3>עדיין אין חיבור זוגי פעיל</h3>
+        <p class="helper-text">כדי לקבל כאן עצות לפני ובמהלך המחזור לפי הנתונים של בת הזוג — צריך להשלים חיבור זוגי תחילה.</p>
+        <div class="actions"><a class="btn primary link-btn" href="#/connect">מעבר לחיבור זוגי</a></div>
+      </article>`;
+      return;
+    }
+
+    if (partnerData.partner.role !== 'female') {
+      mount.innerHTML = `<article class="platform-card dashboard-male-card">
+        <h3>חיבור פעיל</h3>
+        <p>${escapeHtml(partnerData.partner.name)} מחובר/ת. עצות מחזור מותאמות מוצגות כשבן/בת הזוג עם תפקיד "אישה" מזינים מעקב מחזור.</p>
+      </article>`;
+      return;
+    }
+
+    const cycleData = await api<{ entries: MaleCycleEntry[] }>('/tracking/cycle/view');
+    const advice = buildMalePartnerAdvice(partnerData.partner.name, cycleData.entries);
+    mount.innerHTML = renderMaleDashboardCards(partnerData.partner.name, advice);
+  } catch {
+    mount.innerHTML = `<article class="platform-card dashboard-male-card"><p class="helper-text">לא הצלחנו לטעון את העצות. נסו לרענן או בדקו שהתחברתם מחדש.</p></article>`;
+  }
+};
+
 const shellTemplate = (
   content: string,
   withNav = false,
@@ -322,6 +537,14 @@ const renderDashboard = () => {
       : userRole === 'female'
         ? 'פלטפורמת אישה'
         : 'פלטפורמה כללית';
+  const maleBlock =
+    userRole === 'male'
+      ? `<div class="entry-note">
+        <strong>עצות לפי החיבור ובת זוג</strong>
+        <span>להלן המלצות פרקטיות לפי חיבור זוגי פעיל ולפי מעקב המחזור והתסמינים שבת הזוג מזינה (לא אבחון רפואי).</span>
+      </div>
+      <div id="maleDashboardMount" class="platform-grid dashboard-male-grid"></div>`
+      : '';
   app.innerHTML = shellTemplate(
     `<section class="panel glass page">
       <h2>דאשבורד</h2>
@@ -331,17 +554,21 @@ const renderDashboard = () => {
         <strong>${platformLabel}</strong>
         <span>${
           userRole === 'male'
-            ? 'ממשק ממוקד להבנת מצבים רגשיים, זיהוי סיכון לריב והמלצות תקשורת.'
+            ? 'ממשק ממוקד להבנת מצבים רגשיים, זיהוי סיכון לריב והמלצות תקשורת — כולל תמונה מעודכנת לפי נתוני בת הזוג כשהחיבור פעיל.'
             : userRole === 'female'
               ? 'ממשק ממוקד לשיקוף מצב רגשי, שיתוף צרכים אישיים והגדרת גבולות תקשורת.'
               : 'ניתן לבחור תפקיד בהרשמה כדי לקבל חוויה מותאמת לגבר או לאישה.'
         }</span>
       </div>
+      ${maleBlock}
       <pre id="output"></pre>
     </section>`,
     true,
   );
   bindLogout();
+  if (userRole === 'male') {
+    void loadMaleDashboardInsights();
+  }
 };
 
 const renderPlatformPage = () => {

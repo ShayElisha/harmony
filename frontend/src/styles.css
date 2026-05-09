@@ -288,6 +288,46 @@ body {
   line-height: 1.45;
 }
 
+.dashboard-male-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.dashboard-male-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-male-headline {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #f0f3ff;
+}
+
+.dashboard-snapshot {
+  font-size: 0.92rem;
+  color: #b9c6ff;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.dashboard-tips {
+  margin: 0;
+  padding-inline-start: 1.1rem;
+  color: #dfe6ff;
+  line-height: 1.55;
+}
+
+.dashboard-tips li {
+  margin-bottom: 6px;
+}
+
+.helper-text.subtle {
+  font-size: 0.85rem;
+  opacity: 0.88;
+  margin-bottom: 0;
+}
+
 .qa-grid {
   margin-top: 12px;
   display: grid;
