@@ -21,7 +21,13 @@ import { TrackingModule } from './modules/tracking/tracking.module';
         if (!uri) {
           throw new Error('MONGO_URI is required in runtime environment');
         }
-        return { uri };
+        return {
+          uri,
+          serverSelectionTimeoutMS: 5000,
+          connectTimeoutMS: 5000,
+          socketTimeoutMS: 10000,
+          maxPoolSize: 5,
+        };
       },
     }),
     HealthModule,

@@ -10,6 +10,22 @@ type Handler = (req: Request, res: Response) => void | Promise<void>;
 const expressApp = express();
 let cachedHandler: Handler | null = null;
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeoutId: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 async function getHandler(): Promise<Handler> {
   if (cachedHandler) return cachedHandler;
 
@@ -41,7 +57,7 @@ export default async function handler(req: Request, res: Response): Promise<void
       req.url = '/';
     }
     console.log(`[api] normalized ${req.method} ${req.url}`);
-    const appHandler = await getHandler();
+    const appHandler = await withTimeout(getHandler(), 12000, 'Nest bootstrap');
     await appHandler(req, res);
   } catch (error) {
     console.error('backend/api handler failed', error);
