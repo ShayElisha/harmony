@@ -7,7 +7,9 @@
     },
     "backend": {
       "entrypoint": "backend",
-      "routePrefix": "/api"
+      "routePrefix": "/api",
+      "installCommand": "npm install",
+      "buildCommand": "npm run build"
     },
     "ai-service": {
       "entrypoint": "ai-service",
