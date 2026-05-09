@@ -1,0 +1,8 @@
+{
+  "name": "harmony-monorepo",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ]
+}
