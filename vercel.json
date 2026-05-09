@@ -10,8 +10,7 @@
       "routePrefix": "/api",
       "framework": "other",
       "installCommand": "npm install",
-      "buildCommand": "npm run build",
-      "startCommand": "npm run start:prod"
+      "buildCommand": "npm run build"
     },
     "ai-service": {
       "entrypoint": "ai-service",
