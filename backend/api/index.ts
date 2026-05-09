@@ -1,5 +1,15 @@
-type Handler = (req: any, res: any) => void | Promise<void>;
+import 'reflect-metadata';
+import '@nestjs/mongoose';
+import { ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { ExpressAdapter } from '@nestjs/platform-express';
+import express, { type NextFunction, type Request, type Response } from 'express';
+import mongoose from 'mongoose';
+import { AppModule } from '../src/app.module';
 
+type Handler = (req: Request, res: Response) => void | Promise<void>;
+
+const expressApp = express();
 let cachedHandler: Handler | null = null;
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -21,16 +31,8 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
 async function getHandler(): Promise<Handler> {
   if (cachedHandler) return cachedHandler;
 
-  await import('reflect-metadata');
-  const { ValidationPipe } = await import('@nestjs/common');
-  const { NestFactory } = await import('@nestjs/core');
-  const { ExpressAdapter } = await import('@nestjs/platform-express');
-  const express = (await import('express')).default;
-  const mongoose = (await import('mongoose')).default;
-  const { AppModule } = await import('../src/app.module');
-  const expressApp = express();
   const nestApp = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
-  nestApp.use((req: any, res: any, next: any) => {
+  nestApp.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -47,7 +49,7 @@ async function getHandler(): Promise<Handler> {
   return cachedHandler;
 }
 
-export default async function handler(req: any, res: any): Promise<void> {
+export default async function handler(req: Request, res: Response): Promise<void> {
   try {
     console.log(`[api] incoming ${req.method} ${req.url}`);
     if (req.url.startsWith('/api/')) {
