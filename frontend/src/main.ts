@@ -28,13 +28,24 @@ const clearSession = () => {
   localStorage.removeItem('harmony_user_role');
 };
 
+const withCacheBust = (path: string): string => {
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}_ts=${Date.now()}`;
+};
+
 const api = async <T>(path: string, body?: unknown): Promise<T> => {
-  const res = await fetch(`${apiBaseUrl}${path}`, {
+  const isGet = !body;
+  const requestPath = isGet ? withCacheBust(path) : path;
+  const res = await fetch(`${apiBaseUrl}${requestPath}`, {
     method: body ? 'POST' : 'GET',
     headers: {
       'Content-Type': 'application/json',
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
     },
+    cache: 'no-store',
     body: body ? JSON.stringify(body) : undefined,
   });
   let payload: unknown = null;
@@ -452,6 +463,7 @@ const renderConnectPage = () => {
     try {
       output.textContent = JSON.stringify(await api('/couples/invite', { partnerEmail }), null, 2);
       toast('הזמנה נוצרה ונשלחה', 'success');
+      await loadPartnerDetails();
     } catch (error) {
       output.textContent = String(error);
       toast('יצירת הזמנה נכשלה', 'error');
@@ -464,6 +476,7 @@ const renderConnectPage = () => {
     try {
       output.textContent = JSON.stringify(await api('/couples/connect', { inviteCode }), null, 2);
       toast('החיבור הזוגי הושלם', 'success');
+      await loadPartnerDetails();
     } catch (error) {
       output.textContent = String(error);
       toast('חיבור לפי קוד נכשל', 'error');
@@ -516,6 +529,7 @@ const renderConnectPage = () => {
       try {
         await api(`/couples/requests/${approveId}/approve`, {});
         toast('בקשה אושרה', 'success');
+        await loadPartnerDetails();
       } catch (error) {
         output.textContent = String(error);
         toast('אישור בקשה נכשל', 'error');
@@ -526,6 +540,7 @@ const renderConnectPage = () => {
       try {
         await api(`/couples/requests/${rejectId}/reject`, {});
         toast('בקשה נדחתה', 'success');
+        await loadPartnerDetails();
       } catch (error) {
         output.textContent = String(error);
         toast('דחיית בקשה נכשלה', 'error');
@@ -909,24 +924,7 @@ const renderMoodPage = () => {
     true,
   );
   bindLogout();
-  byId<HTMLButtonElement>('moodBtn')?.addEventListener('click', async () => {
-    const irritability = Number(byId<HTMLInputElement>('irritabilityInput')?.value ?? 6);
-    const fatigue = Number(byId<HTMLInputElement>('fatigueInput')?.value ?? 5);
-    const output = byId<HTMLPreElement>('output');
-    if (!output) return;
-    try {
-      output.textContent = JSON.stringify(
-        await api('/tracking/mood', { irritability, fatigue, note: 'mood page submit' }),
-        null,
-        2,
-      );
-      toast('מדד מצב רוח נשמר', 'success');
-    } catch (error) {
-      output.textContent = String(error);
-      toast('שמירת מצב רוח נכשלה', 'error');
-    }
-  });
-  byId<HTMLButtonElement>('moodHistoryBtn')?.addEventListener('click', async () => {
+  const loadMoodHistory = async (showToast = true) => {
     const output = byId<HTMLPreElement>('output');
     const moodList = byId<HTMLDivElement>('moodList');
     if (!output) return;
@@ -950,11 +948,34 @@ const renderMoodPage = () => {
           : '<article class="platform-card"><p>אין עדיין מדדי מצב רוח.</p></article>';
       }
       output.textContent = 'loaded';
-      toast('היסטוריית מצב רוח נטענה', 'success');
+      if (showToast) {
+        toast('היסטוריית מצב רוח נטענה', 'success');
+      }
     } catch (error) {
       output.textContent = String(error);
       toast('טעינת היסטוריה נכשלה', 'error');
     }
+  };
+  byId<HTMLButtonElement>('moodBtn')?.addEventListener('click', async () => {
+    const irritability = Number(byId<HTMLInputElement>('irritabilityInput')?.value ?? 6);
+    const fatigue = Number(byId<HTMLInputElement>('fatigueInput')?.value ?? 5);
+    const output = byId<HTMLPreElement>('output');
+    if (!output) return;
+    try {
+      output.textContent = JSON.stringify(
+        await api('/tracking/mood', { irritability, fatigue, note: 'mood page submit' }),
+        null,
+        2,
+      );
+      toast('מדד מצב רוח נשמר', 'success');
+      await loadMoodHistory(false);
+    } catch (error) {
+      output.textContent = String(error);
+      toast('שמירת מצב רוח נכשלה', 'error');
+    }
+  });
+  byId<HTMLButtonElement>('moodHistoryBtn')?.addEventListener('click', async () => {
+    await loadMoodHistory();
   });
 };
 
@@ -1049,26 +1070,7 @@ const renderNotificationsPage = () => {
     true,
   );
   bindLogout();
-  byId<HTMLButtonElement>('saveNotifBtn')?.addEventListener('click', async () => {
-    const output = byId<HTMLPreElement>('output');
-    if (!output) return;
-    try {
-      output.textContent = JSON.stringify(
-        await api('/tracking/notifications', {
-          smartAlerts: byId<HTMLInputElement>('smartAlerts')?.checked ?? true,
-          predictionAlerts: byId<HTMLInputElement>('predictionAlerts')?.checked ?? true,
-          humorAlerts: byId<HTMLInputElement>('humorAlerts')?.checked ?? true,
-        }),
-        null,
-        2,
-      );
-      toast('הגדרות התראות נשמרו', 'success');
-    } catch (error) {
-      output.textContent = String(error);
-      toast('שמירת התראות נכשלה', 'error');
-    }
-  });
-  byId<HTMLButtonElement>('loadNotifBtn')?.addEventListener('click', async () => {
+  const loadNotifications = async (showToast = true) => {
     const output = byId<HTMLPreElement>('output');
     const notifView = byId<HTMLDivElement>('notifView');
     if (!output) return;
@@ -1088,11 +1090,36 @@ const renderNotificationsPage = () => {
           : '<article class="platform-card"><p>אין עדיין הגדרות התראות שמורות.</p></article>';
       }
       output.textContent = 'loaded';
-      toast('הגדרות התראות נטענו', 'success');
+      if (showToast) {
+        toast('הגדרות התראות נטענו', 'success');
+      }
     } catch (error) {
       output.textContent = String(error);
       toast('טעינת התראות נכשלה', 'error');
     }
+  };
+  byId<HTMLButtonElement>('saveNotifBtn')?.addEventListener('click', async () => {
+    const output = byId<HTMLPreElement>('output');
+    if (!output) return;
+    try {
+      output.textContent = JSON.stringify(
+        await api('/tracking/notifications', {
+          smartAlerts: byId<HTMLInputElement>('smartAlerts')?.checked ?? true,
+          predictionAlerts: byId<HTMLInputElement>('predictionAlerts')?.checked ?? true,
+          humorAlerts: byId<HTMLInputElement>('humorAlerts')?.checked ?? true,
+        }),
+        null,
+        2,
+      );
+      toast('הגדרות התראות נשמרו', 'success');
+      await loadNotifications(false);
+    } catch (error) {
+      output.textContent = String(error);
+      toast('שמירת התראות נכשלה', 'error');
+    }
+  });
+  byId<HTMLButtonElement>('loadNotifBtn')?.addEventListener('click', async () => {
+    await loadNotifications();
   });
 };
 
@@ -1119,19 +1146,7 @@ const renderGoalsPage = () => {
     true,
   );
   bindLogout();
-  byId<HTMLButtonElement>('saveGoalBtn')?.addEventListener('click', async () => {
-    const output = byId<HTMLPreElement>('output');
-    const title = byId<HTMLInputElement>('goalTitle')?.value;
-    if (!output || !title) return;
-    try {
-      output.textContent = JSON.stringify(await api('/tracking/goals', { title }), null, 2);
-      toast('יעד נשמר', 'success');
-    } catch (error) {
-      output.textContent = String(error);
-      toast('שמירת יעד נכשלה', 'error');
-    }
-  });
-  byId<HTMLButtonElement>('loadGoalsBtn')?.addEventListener('click', async () => {
+  const loadGoals = async (showToast = true) => {
     const output = byId<HTMLPreElement>('output');
     const goalsList = byId<HTMLDivElement>('goalsList');
     if (!output) return;
@@ -1151,11 +1166,29 @@ const renderGoalsPage = () => {
           : '<article class="platform-card"><p>אין עדיין יעדים שמורים.</p></article>';
       }
       output.textContent = 'loaded';
-      toast('יעדים נטענו', 'success');
+      if (showToast) {
+        toast('יעדים נטענו', 'success');
+      }
     } catch (error) {
       output.textContent = String(error);
       toast('טעינת יעדים נכשלה', 'error');
     }
+  };
+  byId<HTMLButtonElement>('saveGoalBtn')?.addEventListener('click', async () => {
+    const output = byId<HTMLPreElement>('output');
+    const title = byId<HTMLInputElement>('goalTitle')?.value;
+    if (!output || !title) return;
+    try {
+      output.textContent = JSON.stringify(await api('/tracking/goals', { title }), null, 2);
+      toast('יעד נשמר', 'success');
+      await loadGoals(false);
+    } catch (error) {
+      output.textContent = String(error);
+      toast('שמירת יעד נכשלה', 'error');
+    }
+  });
+  byId<HTMLButtonElement>('loadGoalsBtn')?.addEventListener('click', async () => {
+    await loadGoals();
   });
 };
 

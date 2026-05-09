@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
@@ -14,6 +14,8 @@ import { Preference, PreferenceDocument } from '../../common/schemas/preference.
 
 @Injectable()
 export class TrackingService {
+  private readonly logger = new Logger(TrackingService.name);
+
   constructor(
     @InjectModel(MoodEntry.name) private readonly moodEntryModel: Model<MoodEntryDocument>,
     @InjectModel(CycleEntry.name) private readonly cycleEntryModel: Model<CycleEntryDocument>,
@@ -62,6 +64,9 @@ export class TrackingService {
     symptoms: string[] = [],
     energyLevel?: number,
   ) {
+    this.logger.log(
+      `[createCycle] userId=${userId} role=${userRole} startDate=${startDate} endDate=${endDate ?? '-'} symptomsCount=${symptoms.length}`,
+    );
     if (userRole !== 'female') {
       throw new ForbiddenException('Only female users can create cycle entries');
     }
@@ -73,6 +78,7 @@ export class TrackingService {
       symptoms,
       energyLevel,
     });
+    this.logger.log(`[createCycle] stored entryId=${entry.id} userId=${userId}`);
     return { message: 'Cycle entry stored', entryId: entry.id };
   }
 
@@ -86,6 +92,7 @@ export class TrackingService {
   }
 
   async getVisibleCycles(viewerId: string, viewerRole: CurrentUser['role']) {
+    this.logger.log(`[getVisibleCycles] viewerId=${viewerId} role=${viewerRole}`);
     if (viewerRole === 'female') {
       return this.getCycles(viewerId);
     }
@@ -100,11 +107,13 @@ export class TrackingService {
         .lean();
 
       if (!couple) {
+        this.logger.log(`[getVisibleCycles] no accepted couple found for viewerId=${viewerId}`);
         return { entries: [] };
       }
 
       const partnerId =
         String(couple.userAId) === viewerId ? String(couple.userBId) : String(couple.userAId);
+      this.logger.log(`[getVisibleCycles] resolved partnerId=${partnerId} for viewerId=${viewerId}`);
       return this.getCycles(partnerId);
     }
 
@@ -119,18 +128,26 @@ export class TrackingService {
     shareCycle: boolean,
     importantTiming: string,
   ) {
+    this.logger.log(
+      `[upsertPreferences] userId=${userId} helpfulLen=${helpfulActions.length} avoidLen=${avoidActions.length} timingLen=${importantTiming.length}`,
+    );
     const doc = await this.preferenceModel.findOneAndUpdate(
       { userId: new Types.ObjectId(userId) },
       { helpfulActions, avoidActions, shareMood, shareCycle, importantTiming },
       { new: true, upsert: true },
     );
+    this.logger.log(`[upsertPreferences] stored preferenceId=${doc?.id ?? 'unknown'} userId=${userId}`);
     return { message: 'Preferences saved', preferences: doc };
   }
 
   async getPreferences(userId: string) {
+    this.logger.log(`[getPreferences] userId=${userId}`);
     const preferences = await this.preferenceModel
       .findOne({ userId: new Types.ObjectId(userId) })
       .lean();
+    this.logger.log(
+      `[getPreferences] userId=${userId} found=${preferences ? 'yes' : 'no'} preferenceId=${preferences?._id ?? '-'}`,
+    );
     return { preferences };
   }
 
@@ -140,19 +157,23 @@ export class TrackingService {
   }
 
   async createGoal(userId: string, title: string) {
+    this.logger.log(`[createGoal] userId=${userId} titleLen=${title.length}`);
     const goal = await this.goalModel.create({
       userId: new Types.ObjectId(userId),
       title,
       status: 'active',
     });
+    this.logger.log(`[createGoal] stored goalId=${goal.id} userId=${userId}`);
     return { message: 'Goal saved', goalId: goal.id };
   }
 
   async getGoals(userId: string) {
+    this.logger.log(`[getGoals] userId=${userId}`);
     const goals = await this.goalModel
       .find({ userId: new Types.ObjectId(userId) })
       .sort({ createdAt: -1 })
       .lean();
+    this.logger.log(`[getGoals] userId=${userId} count=${goals.length}`);
     return { goals };
   }
 
@@ -162,18 +183,28 @@ export class TrackingService {
     predictionAlerts: boolean,
     humorAlerts: boolean,
   ) {
+    this.logger.log(
+      `[upsertNotifications] userId=${userId} smart=${smartAlerts} prediction=${predictionAlerts} humor=${humorAlerts}`,
+    );
     const settings = await this.notificationSettingModel.findOneAndUpdate(
       { userId: new Types.ObjectId(userId) },
       { smartAlerts, predictionAlerts, humorAlerts },
       { upsert: true, new: true },
     );
+    this.logger.log(
+      `[upsertNotifications] stored settingsId=${settings?.id ?? 'unknown'} userId=${userId}`,
+    );
     return { message: 'Notification settings saved', settings };
   }
 
   async getNotifications(userId: string) {
+    this.logger.log(`[getNotifications] userId=${userId}`);
     const settings = await this.notificationSettingModel
       .findOne({ userId: new Types.ObjectId(userId) })
       .lean();
+    this.logger.log(
+      `[getNotifications] userId=${userId} found=${settings ? 'yes' : 'no'} settingsId=${settings?._id ?? '-'}`,
+    );
     return { settings };
   }
 }
