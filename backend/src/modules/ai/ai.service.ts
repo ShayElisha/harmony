@@ -20,7 +20,7 @@ export class AiService {
 
     const vercelUrl = this.config.get<string>('VERCEL_URL');
     if (vercelUrl) {
-      return `https://${vercelUrl}/_ai`;
+      return `https://${vercelUrl}/api/ai`;
     }
 
     return 'http://localhost:8001';
