@@ -14,8 +14,8 @@
     { "src": "ai-service/app/main.py", "use": "@vercel/python" }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "backend/api/index.ts" },
-    { "src": "/_ai/(.*)", "dest": "ai-service/app/main.py" },
+    { "src": "/api/(.*)", "dest": "/backend/api/index.ts" },
+    { "src": "/_ai/(.*)", "dest": "/ai-service/app/main.py" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
