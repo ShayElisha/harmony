@@ -1,23 +1,24 @@
-import { Prop, Schema } from '@nestjs/mongoose/dist/decorators';
-import { SchemaFactory } from '@nestjs/mongoose/dist/factories';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Schema } from 'mongoose';
 
 export type UserDocument = HydratedDocument<User>;
 export type UserRole = 'male' | 'female' | 'other';
 
-@Schema({ timestamps: true })
 export class User {
-  @Prop({ required: true, trim: true })
   name!: string;
 
-  @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email!: string;
 
-  @Prop({ required: true })
   passwordHash!: string;
 
-  @Prop({ default: 'other' })
   role!: UserRole;
 }
 
-export const UserSchema = SchemaFactory.createForClass(User);
+export const UserSchema = new Schema<User>(
+  {
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    passwordHash: { type: String, required: true },
+    role: { type: String, default: 'other' },
+  },
+  { timestamps: true },
+);

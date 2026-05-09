@@ -1,20 +1,21 @@
-import { Prop, Schema } from '@nestjs/mongoose/dist/decorators';
-import { SchemaFactory } from '@nestjs/mongoose/dist/factories';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Schema, Types } from 'mongoose';
 import { User } from './user.schema';
 
 export type GoalDocument = HydratedDocument<Goal>;
 
-@Schema({ timestamps: true })
 export class Goal {
-  @Prop({ type: Types.ObjectId, ref: User.name, required: true })
   userId!: Types.ObjectId;
 
-  @Prop({ required: true })
   title!: string;
 
-  @Prop({ default: 'active' })
   status!: 'active' | 'completed';
 }
 
-export const GoalSchema = SchemaFactory.createForClass(Goal);
+export const GoalSchema = new Schema<Goal>(
+  {
+    userId: { type: Types.ObjectId, ref: User.name, required: true },
+    title: { type: String, required: true },
+    status: { type: String, default: 'active' },
+  },
+  { timestamps: true },
+);
