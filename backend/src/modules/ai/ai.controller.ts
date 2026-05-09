@@ -1,13 +1,17 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { IsString, MinLength } from 'class-validator';
+import { BadRequestException, Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { CurrentUserData } from '../../common/auth/current-user.decorator';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
 import { AiService } from './ai.service';
 
-class AiInputDto {
-  @IsString()
-  @MinLength(2)
-  input!: string;
+function assertAiInput(body: unknown): { input: string } {
+  if (typeof body !== 'object' || body === null || !('input' in body)) {
+    throw new BadRequestException('input is required');
+  }
+  const input = (body as { input?: unknown }).input;
+  if (typeof input !== 'string' || input.trim().length < 2) {
+    throw new BadRequestException('input must be a string with at least 2 characters');
+  }
+  return { input: input.trim() };
 }
 
 @Controller('ai')
@@ -16,13 +20,15 @@ export class AiController {
   constructor(private readonly aiService: AiService) {}
 
   @Post('translate')
-  async translate(@CurrentUserData() user: { userId: string }, @Body() body: AiInputDto) {
-    return this.aiService.translate(user.userId, body.input);
+  async translate(@CurrentUserData() user: { userId: string }, @Body() body: unknown) {
+    const { input } = assertAiInput(body);
+    return this.aiService.translate(user.userId, input);
   }
 
   @Post('emergency')
-  async emergency(@CurrentUserData() user: { userId: string }, @Body() body: AiInputDto) {
-    return this.aiService.emergency(user.userId, body.input);
+  async emergency(@CurrentUserData() user: { userId: string }, @Body() body: unknown) {
+    const { input } = assertAiInput(body);
+    return this.aiService.emergency(user.userId, input);
   }
 
   @Get('logs/me')
