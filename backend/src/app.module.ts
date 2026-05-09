@@ -16,11 +16,13 @@ import { TrackingModule } from './modules/tracking/tracking.module';
     }),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        uri:
-          configService.get<string>('MONGO_URI') ??
-          'mongodb://localhost:27017/harmonyai',
-      }),
+      useFactory: (configService: ConfigService) => {
+        const uri = configService.get<string>('MONGO_URI');
+        if (!uri) {
+          throw new Error('MONGO_URI is required in runtime environment');
+        }
+        return { uri };
+      },
     }),
     HealthModule,
     AuthModule,

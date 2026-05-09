@@ -22,6 +22,15 @@ async function getHandler(): Promise<Handler> {
 }
 
 export default async function handler(req: Request, res: Response): Promise<void> {
-  const appHandler = await getHandler();
-  await appHandler(req, res);
+  try {
+    const appHandler = await getHandler();
+    await appHandler(req, res);
+  } catch (error) {
+    console.error('backend/api handler failed', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        message: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  }
 }
