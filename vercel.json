@@ -1,11 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm --prefix frontend ci && npm --prefix backend install --include=dev --no-audit --no-fund",
-  "buildCommand": "npm --prefix frontend run build",
+  "installCommand": "npm --prefix frontend ci && npm --prefix backend install --include=dev --no-audit --no-fund && npm install --omit=dev --no-audit --no-fund",
+  "buildCommand": "npm --prefix frontend run build && npm --prefix backend run build",
   "framework": null,
   "outputDirectory": "frontend/dist",
   "functions": {
-    "api/index.ts": {
+    "api/index.js": {
       "maxDuration": 60
     },
     "api/ai.py": {
